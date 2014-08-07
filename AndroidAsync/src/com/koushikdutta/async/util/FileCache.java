@@ -54,9 +54,17 @@ public class FileCache {
         }
     }
 
+    public void setCaching(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    boolean enabled;
     boolean loadAsync;
     Random random = new Random();
     public File getTempFile() {
+        if (!enabled) {
+            return null;
+        }
         File f;
         while ((f = new File(directory, new BigInteger(128, random).toString(16))).exists());
         return f;
@@ -79,6 +87,9 @@ public class FileCache {
     }
 
     public void remove(String key) {
+        if (!enabled) {
+            return;
+        }
         int i = 0;
         while (cache.remove(getPartName(key, i)) != null) {
             i++;
@@ -94,22 +105,31 @@ public class FileCache {
         return getPartFile(key, 0).exists();
     }
 
-    public File touch(File file) {
+    private File touch(File file) {
         cache.get(file.getName());
         file.setLastModified(System.currentTimeMillis());
         return file;
     }
 
     public FileInputStream get(String key) throws IOException {
+        if (!enabled) {
+            return null;
+        }
         return new FileInputStream(touch(getPartFile(key, 0)));
     }
 
     public File getFile(String key) {
+        if (!enabled) {
+            return null;
+        }
         return touch(getPartFile(key, 0));
     }
 
     public FileInputStream[] get(String key, int count) throws IOException {
         FileInputStream[] ret = new FileInputStream[count];
+        if (!enabled) {
+            return ret;
+        }
         try {
             for (int i = 0; i < count; i++) {
                 ret[i] = new FileInputStream(touch(getPartFile(key, i)));
@@ -132,6 +152,9 @@ public class FileCache {
     }
 
     public void commitTempFiles(String key, File... tempFiles) {
+        if (!enabled) {
+            return;
+        }
         removePartFiles(key);
 
         // try to rename everything
@@ -207,6 +230,9 @@ public class FileCache {
 
     boolean loading;
     void load() {
+        if (!enabled) {
+            return;
+        }
         loading = true;
         try {
             File[] files = directory.listFiles();
