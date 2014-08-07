@@ -57,6 +57,9 @@ public class FileCache {
     boolean loadAsync;
     Random random = new Random();
     public File getTempFile() {
+        if (size() == 0) {
+            return null;
+        }
         File f;
         while ((f = new File(directory, new BigInteger(128, random).toString(16))).exists());
         return f;
