@@ -126,7 +126,12 @@ public class AsyncServer {
         synchronousWorkers.execute(new Runnable() {
             @Override
             public void run() {
-                selector.wakeupOnce();
+                try {
+                    selector.wakeupOnce();
+                }
+                catch (Exception e) {
+                    Log.i(LOGTAG, "Selector Exception? L Preview?");
+                }
             }
         });
     }
@@ -224,7 +229,9 @@ public class AsyncServer {
 //        Log.i(LOGTAG, "****AsyncServer is shutting down.****");
         final SelectorWrapper currentSelector;
         final Semaphore semaphore;
+        final boolean isAffinityThread;
         synchronized (this) {
+            isAffinityThread = isAffinityThread();
             currentSelector = mSelector;
             if (currentSelector == null)
                 return;
@@ -251,7 +258,8 @@ public class AsyncServer {
             mAffinity = null;
         }
         try {
-            semaphore.acquire();
+            if (!isAffinityThread)
+                semaphore.acquire();
         }
         catch (Exception e) {
         }
@@ -600,6 +608,10 @@ public class AsyncServer {
                 runLoop(server, selector, queue);
             }
             catch (ClosedSelectorException e) {
+                StreamUtility.closeQuietly(selector.getSelector());
+            }
+            catch (AsyncSelectorException e) {
+                StreamUtility.closeQuietly(selector.getSelector());
             }
             // see if we keep looping, this must be in a synchronized block since the queue is accessed.
             synchronized (server) {
@@ -718,6 +730,9 @@ public class AsyncServer {
                     selector.select(wait);
                 }
             }
+        }
+        catch (NullPointerException e) {
+            throw new AsyncSelectorException(e);
         }
         catch (IOException e) {
             throw new AsyncSelectorException(e);

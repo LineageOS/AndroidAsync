@@ -15,7 +15,6 @@ public class ZipDataSink extends FilteredDataSink {
 
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     ZipOutputStream zop = new ZipOutputStream(bout);
-    boolean first = true;
 
     public void putNextEntry(ZipEntry ze) throws IOException {
         zop.putNextEntry(ze);
@@ -31,7 +30,8 @@ public class ZipDataSink extends FilteredDataSink {
             closed.onCompleted(e);
     }
 
-    public void close() {
+    @Override
+    public void end() {
         try {
             zop.close();
         }
@@ -41,7 +41,7 @@ public class ZipDataSink extends FilteredDataSink {
         }
         setMaxBuffer(Integer.MAX_VALUE);
         write(new ByteBufferList());
-        super.close();
+        super.end();
     }
 
     @Override
@@ -50,7 +50,7 @@ public class ZipDataSink extends FilteredDataSink {
             if (bb != null) {
                 while (bb.size() > 0) {
                     ByteBuffer b = bb.remove();
-                    zop.write(b.array(), b.arrayOffset() + b.position(), b.remaining());
+                    ByteBufferList.writeOutputStream(zop, b);
                     ByteBufferList.reclaim(b);
                 }
             }

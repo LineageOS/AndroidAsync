@@ -1,5 +1,7 @@
 package com.koushikdutta.async.http;
 
+import android.text.TextUtils;
+
 import com.koushikdutta.async.AsyncServer;
 import com.koushikdutta.async.AsyncSocket;
 import com.koushikdutta.async.ByteBufferList;
@@ -15,8 +17,10 @@ import com.koushikdutta.async.http.body.AsyncHttpRequestBody;
 import com.koushikdutta.async.http.filter.ChunkedOutputFilter;
 import com.koushikdutta.async.http.libcore.RawHeaders;
 import com.koushikdutta.async.http.libcore.ResponseHeaders;
+import com.koushikdutta.async.util.Charsets;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 
 abstract class AsyncHttpResponseImpl extends FilteredDataEmitter implements AsyncHttpResponse {
     private AsyncHttpRequestBody mWriter;
@@ -40,7 +44,7 @@ abstract class AsyncHttpResponseImpl extends FilteredDataEmitter implements Asyn
         if (mWriter != null) {
             if (mRequest.getHeaders().getContentType() == null)
                 mRequest.getHeaders().setContentType(mWriter.getContentType());
-            if (mWriter.length() > 0) {
+            if (mWriter.length() >= 0) {
                 mRequest.getHeaders().setContentLength(mWriter.length());
                 mSink = mSocket;
             }
@@ -99,18 +103,19 @@ abstract class AsyncHttpResponseImpl extends FilteredDataEmitter implements Asyn
             }
         }
     };
-    
+
     protected abstract void onHeadersReceived();
-    
+
     StringCallback mHeaderCallback = new StringCallback() {
         private RawHeaders mRawHeaders = new RawHeaders();
         @Override
         public void onStringAvailable(String s) {
             try {
+                s = s.trim();
                 if (mRawHeaders.getStatusLine() == null) {
                     mRawHeaders.setStatusLine(s);
                 }
-                else if (!"\r".equals(s)) {
+                else if (!TextUtils.isEmpty(s)) {
                     mRawHeaders.addLine(s);
                 }
                 else {
@@ -218,11 +223,6 @@ abstract class AsyncHttpResponseImpl extends FilteredDataEmitter implements Asyn
     }
 
     @Override
-    public void close() {
-        mSink.close();
-    }
-
-    @Override
     public void setClosedCallback(CompletedCallback handler) {
         mSink.setClosedCallback(handler);
     }
@@ -235,5 +235,15 @@ abstract class AsyncHttpResponseImpl extends FilteredDataEmitter implements Asyn
     @Override
     public AsyncServer getServer() {
         return mSocket.getServer();
+    }
+
+    @Override
+    public String charset() {
+        Multimap mm = Multimap.parseHeader(getHeaders().getHeaders(), "Content-Type");
+        String cs;
+        if (mm != null && null != (cs = mm.getString("charset")) && Charset.isSupported(cs)) {
+            return cs;
+        }
+        return null;
     }
 }

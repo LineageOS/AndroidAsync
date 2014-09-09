@@ -3,7 +3,7 @@ package com.koushikdutta.async.http;
 import android.net.Uri;
 import android.text.TextUtils;
 
-import com.koushikdutta.async.AsyncSSLException;
+import com.koushikdutta.async.AsyncSSLSocket;
 import com.koushikdutta.async.AsyncSSLSocketWrapper;
 import com.koushikdutta.async.AsyncSocket;
 import com.koushikdutta.async.LineEmitter;
@@ -12,34 +12,77 @@ import com.koushikdutta.async.callback.CompletedCallback;
 import com.koushikdutta.async.callback.ConnectCallback;
 import com.koushikdutta.async.http.libcore.RawHeaders;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
-
-import java.io.IOException;
-import java.net.URI;
 
 public class AsyncSSLSocketMiddleware extends AsyncSocketMiddleware {
     public AsyncSSLSocketMiddleware(AsyncHttpClient client) {
         super(client, "https", 443);
     }
 
-    SSLContext sslContext;
+    protected SSLContext sslContext;
 
     public void setSSLContext(SSLContext sslContext) {
         this.sslContext = sslContext;
     }
 
-    TrustManager[] trustManagers;
+    public SSLContext getSSLContext() {
+        return sslContext != null ? sslContext : AsyncSSLSocketWrapper.getDefaultSSLContext();
+    }
+
+    protected TrustManager[] trustManagers;
 
     public void setTrustManagers(TrustManager[] trustManagers) {
         this.trustManagers = trustManagers;
     }
 
-    HostnameVerifier hostnameVerifier;
+    protected HostnameVerifier hostnameVerifier;
 
     public void setHostnameVerifier(HostnameVerifier hostnameVerifier) {
         this.hostnameVerifier = hostnameVerifier;
+    }
+
+    protected List<AsyncSSLEngineConfigurator> engineConfigurators = new ArrayList<AsyncSSLEngineConfigurator>();
+
+    public void addEngineConfigurator(AsyncSSLEngineConfigurator engineConfigurator) {
+        engineConfigurators.add(engineConfigurator);
+    }
+
+    public void clearEngineConfigurators() {
+        engineConfigurators.clear();
+    }
+
+    protected SSLEngine createConfiguredSSLEngine(String host, int port) {
+        SSLContext sslContext = getSSLContext();
+        SSLEngine sslEngine = sslContext.createSSLEngine();
+
+        for (AsyncSSLEngineConfigurator configurator : engineConfigurators) {
+            configurator.configureEngine(sslEngine, host, port);
+        }
+
+        return sslEngine;
+    }
+
+    protected AsyncSSLSocketWrapper.HandshakeCallback createHandshakeCallback(final ConnectCallback callback) {
+        return new AsyncSSLSocketWrapper.HandshakeCallback() {
+            @Override
+            public void onHandshakeCompleted(Exception e, AsyncSSLSocket socket) {
+                callback.onConnectCompleted(e, socket);
+            }
+        };
+    }
+
+    protected void tryHandshake(final ConnectCallback callback, AsyncSocket socket, final Uri uri, final int port) {
+        AsyncSSLSocketWrapper.handshake(socket, uri.getHost(), port,
+        createConfiguredSSLEngine(uri.getHost(), port),
+        trustManagers, hostnameVerifier, true,
+        createHandshakeCallback(callback));
     }
 
     @Override
@@ -49,7 +92,7 @@ public class AsyncSSLSocketMiddleware extends AsyncSocketMiddleware {
             public void onConnectCompleted(Exception ex, final AsyncSocket socket) {
                 if (ex == null) {
                     if (!proxied) {
-                        callback.onConnectCompleted(null, new AsyncSSLSocketWrapper(socket, uri.getHost(), port, sslContext, trustManagers, hostnameVerifier, true));
+                        tryHandshake(callback, socket, uri, port);
                     }
                     else {
                         // this SSL connection is proxied, must issue a CONNECT request to the proxy server
@@ -81,7 +124,7 @@ public class AsyncSSLSocketMiddleware extends AsyncSocketMiddleware {
                                             socket.setDataCallback(null);
                                             socket.setEndCallback(null);
                                             if (TextUtils.isEmpty(s.trim())) {
-                                                callback.onConnectCompleted(null, new AsyncSSLSocketWrapper(socket, uri.getHost(), port, sslContext, trustManagers, hostnameVerifier, true));
+                                                tryHandshake(callback, socket, uri, port);
                                             }
                                             else {
                                                 callback.onConnectCompleted(new IOException("unknown second status line"), socket);

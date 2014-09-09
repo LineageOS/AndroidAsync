@@ -17,9 +17,11 @@ import com.koushikdutta.async.http.AsyncHttpClient;
 import com.koushikdutta.async.http.AsyncHttpClient.StringCallback;
 import com.koushikdutta.async.http.AsyncHttpGet;
 import com.koushikdutta.async.http.AsyncHttpHead;
+import com.koushikdutta.async.http.AsyncHttpPost;
 import com.koushikdutta.async.http.AsyncHttpRequest;
 import com.koushikdutta.async.http.AsyncHttpResponse;
 import com.koushikdutta.async.http.ResponseCacheMiddleware;
+import com.koushikdutta.async.http.body.JSONObjectBody;
 import com.koushikdutta.async.http.callback.HttpConnectCallback;
 import com.koushikdutta.async.http.server.AsyncHttpServer;
 import com.koushikdutta.async.http.server.AsyncHttpServerRequest;
@@ -29,8 +31,9 @@ import com.koushikdutta.async.http.server.HttpServerRequestCallback;
 import junit.framework.Assert;
 import junit.framework.TestCase;
 
+import org.json.JSONObject;
+
 import java.io.File;
-import java.net.URI;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
@@ -134,9 +137,8 @@ public class HttpClientTests extends TestCase {
 
     // this testdata file was generated using /dev/random. filename is also the md5 of the file.
     final static String dataNameAndHash = "6691924d7d24237d3b3679310157d640";
-    final static String githubPath = "github.com/koush/AndroidAsync/raw/master/AndroidAsyncTest/testdata/";
+    final static String githubPath = "raw.githubusercontent.com/koush/AndroidAsync/master/AndroidAsync/test/assets/";
     final static String github = "https://" + githubPath + dataNameAndHash;
-    final static String githubInsecure = "http://" + githubPath + dataNameAndHash;
     public void testGithubRandomData() throws Exception {
         final Semaphore semaphore = new Semaphore(0);
         final Md5 md5 = Md5.createInstance();
@@ -173,27 +175,6 @@ public class HttpClientTests extends TestCase {
         final Md5 md5 = Md5.createInstance();
         Future<ByteBufferList> bb = client.executeByteBufferList(new AsyncHttpGet(github), null);
         md5.update(bb.get(TIMEOUT, TimeUnit.MILLISECONDS));
-        assertEquals(md5.digest(), dataNameAndHash);
-    }
-
-    public void testInsecureGithubRandomDataWithFuture() throws Exception {
-        final Md5 md5 = Md5.createInstance();
-        Future<ByteBufferList> bb = client.executeByteBufferList(new AsyncHttpGet(githubInsecure), null);
-        md5.update(bb.get(TIMEOUT, TimeUnit.MILLISECONDS));
-        assertEquals(md5.digest(), dataNameAndHash);
-    }
-
-    public void testInsecureGithubRandomDataWithFutureCallback() throws Exception {
-        final Semaphore semaphore = new Semaphore(0);
-        final Md5 md5 = Md5.createInstance();
-        client.executeByteBufferList(new AsyncHttpGet(githubInsecure), null).setCallback(new FutureCallback<ByteBufferList>() {
-            @Override
-            public void onCompleted(Exception e, ByteBufferList bb) {
-                md5.update(bb);
-                semaphore.release();
-            }
-        });
-        assertTrue("timeout", semaphore.tryAcquire(TIMEOUT, TimeUnit.MILLISECONDS));
         assertEquals(md5.digest(), dataNameAndHash);
     }
 
@@ -346,5 +327,14 @@ public class HttpClientTests extends TestCase {
         AsyncHttpHead req = new AsyncHttpHead(Uri.parse("http://31.media.tumblr.com/9606dcaa33b6877b7c485040393b9392/tumblr_mrtnysMonE1r4vl1yo1_500.jpg"));
         Future<String> str = AsyncHttpClient.getDefaultInstance().executeString(req, null);
         assertTrue(TextUtils.isEmpty(str.get(TIMEOUT, TimeUnit.MILLISECONDS)));
+    }
+
+    public void testPostJsonObject() throws Exception {
+        JSONObject post = new JSONObject();
+        post.put("ping", "pong");
+        AsyncHttpPost p = new AsyncHttpPost("https://koush.clockworkmod.com/test/echo");
+        p.setBody(new JSONObjectBody(post));
+        JSONObject ret = AsyncHttpClient.getDefaultInstance().executeJSONObject(p, null).get();
+        assertEquals("pong", ret.getString("ping"));
     }
 }
